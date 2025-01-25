@@ -32,6 +32,8 @@ let blobVertices = [];  // Remove this
 let noiseOffset = 0;  // Remove this
 let constellationWidths = [];  // Array to store all constellation widths
 let constellationStyle = "both";  // can be "line", "shape", or "both"
+let growthDuration = 1000;  // 1 second for dots to grow
+let constellationDelay = 1200;  // Show constellation after dots finish growing
 
 // Add this class to organize constellation data
 class Constellation {
@@ -162,16 +164,16 @@ function drawDots() {
     
     if (showConnections) {
       let constellationTime = currentTime - constellationStartTime;
-      let fadeInProgress = constrain(constellationTime / 1000, 0, 1);  // 1 second fade in
+      let growthProgress = constrain(constellationTime / growthDuration, 0, 1);
       
       if (!dot.inConstellation) {
         // Fade non-constellation dots to faint
         let fadeProgress = constellationTime / constellationFadeDuration;
         alpha = lerp(255, 50, constrain(fadeProgress, 0, 1));
       } else {
-        // Make constellation dots grow dramatically during fade in
-        sizeFactor = lerp(1, 20, fadeInProgress * fadeInProgress);  // Added easing
-        alpha = lerp(255, 0, fadeInProgress);  // Fade out as they grow
+        // Grow constellation dots first, then fade them out
+        sizeFactor = lerp(1, 8, growthProgress);
+        alpha = lerp(255, 0, growthProgress);
       }
     } else if (dot.arrived) {
       let timeSinceArrival = currentTime - dot.arrivalTime;
@@ -273,7 +275,11 @@ function drawScale() {
 
 function drawConnections() {
   let constellationTime = millis() - constellationStartTime;
-  let fadeInProgress = constrain(constellationTime / 1000, 0, 1);  // 1 second fade in
+  
+  // Only start drawing constellation after dots have grown
+  if (constellationTime < constellationDelay) return;
+  
+  let fadeInProgress = constrain((constellationTime - constellationDelay) / 1000, 0, 1);
   let glowIntensity = constrain(constellationTime / constellationFadeDuration, 0, 1);
   
   for (let constellation of constellations) {
