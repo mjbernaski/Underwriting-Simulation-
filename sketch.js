@@ -2,7 +2,7 @@ let dots = [];
 let histogramBins = [];
 let binCount = 50;
 let animationDuration = 6000; // 60 seconds for each animation
-let pauseDuration = 5000;      // Changed to 5 seconds pause between runs
+let pauseDuration = 8000;      // Changed to 8 seconds pause between runs
 let startTime;
 let numDots = 25000;
 let dotSize = 2;             // Added dot size variable
@@ -162,11 +162,16 @@ function drawDots() {
     
     if (showConnections) {
       let constellationTime = currentTime - constellationStartTime;
+      let fadeInProgress = constrain(constellationTime / 1000, 0, 1);  // 1 second fade in
+      
       if (!dot.inConstellation) {
+        // Fade non-constellation dots to faint
         let fadeProgress = constellationTime / constellationFadeDuration;
         alpha = lerp(255, 50, constrain(fadeProgress, 0, 1));
       } else {
-        sizeFactor = 2;
+        // Make constellation dots grow dramatically during fade in
+        sizeFactor = lerp(1, 20, fadeInProgress * fadeInProgress);  // Added easing
+        alpha = lerp(255, 0, fadeInProgress);  // Fade out as they grow
       }
     } else if (dot.arrived) {
       let timeSinceArrival = currentTime - dot.arrivalTime;
@@ -268,29 +273,39 @@ function drawScale() {
 
 function drawConnections() {
   let constellationTime = millis() - constellationStartTime;
+  let fadeInProgress = constrain(constellationTime / 1000, 0, 1);  // 1 second fade in
   let glowIntensity = constrain(constellationTime / constellationFadeDuration, 0, 1);
   
   for (let constellation of constellations) {
     if (constellationStyle === "shape" || constellationStyle === "both") {
-      // Draw constellation as shape
+      // Draw constellation as shape with rounded edges
       noStroke();
-      fill(red(constellation.color), green(constellation.color), 0, 30);
+      // Fade in the shape opacity
+      let shapeAlpha = 30 * fadeInProgress;
+      fill(red(constellation.color), green(constellation.color), 0, shapeAlpha);
       
       beginShape();
       if (constellation.connections.length > 0) {
         let firstDot = constellation.connections[0].start;
-        vertex(firstDot.x, firstDot.y);
+        curveVertex(firstDot.x, firstDot.y);
+        curveVertex(firstDot.x, firstDot.y);
         
         for (let connection of constellation.connections) {
-          vertex(connection.end.x, connection.end.y);
+          curveVertex(connection.end.x, connection.end.y);
         }
+        
+        let lastDot = constellation.connections[constellation.connections.length - 1].end;
+        curveVertex(lastDot.x, lastDot.y);
+        curveVertex(firstDot.x, firstDot.y);
+        curveVertex(firstDot.x, firstDot.y);
       }
       endShape(CLOSE);
     }
     
     if (constellationStyle === "line" || constellationStyle === "both") {
-      // Draw constellation as line
-      stroke(red(constellation.color), green(constellation.color), 0, connectionAlpha);
+      // Draw constellation as line with fade in
+      let lineAlpha = connectionAlpha * fadeInProgress;
+      stroke(red(constellation.color), green(constellation.color), 0, lineAlpha);
       strokeWeight(2);
       
       beginShape();
@@ -455,6 +470,17 @@ function createConnections() {
     
     console.log("Created constellation with connections:", constellation.connections.length);
     
+    // Clear any previous constellation markings
+    for (let dot of dots) {
+      dot.inConstellation = false;
+    }
+
+    // Mark dots that are part of the constellation
+    for (let connection of constellation.connections) {
+      connection.start.inConstellation = true;
+      connection.end.inConstellation = true;
+    }
+
     // Calculate and store width
     let leftmost = width;
     let rightmost = 0;
