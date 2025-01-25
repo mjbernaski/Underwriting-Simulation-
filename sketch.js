@@ -32,6 +32,7 @@ let numConstellations = 3;
 let constellations = [];
 let portfolioAverageX = 0;
 let constellationWidths = [];
+let fastMode = true;  // Toggle for fast animation mode
 
 class Constellation {
   constructor() {
@@ -44,6 +45,7 @@ class Constellation {
 
 function setup() {
   createCanvas(3200, 1700);
+  pixelDensity(2); 
   for (let i = 0; i < binCount; i++) {
     histogramBins[i] = 0;
   }
@@ -110,8 +112,9 @@ function draw() {
       drawConnections();
       drawConstellationWidth();
     }
+    drawFastModeIndicator();
     // Check if pause is over
-    if (millis() - pauseStartTime >= pauseDuration) {
+    if (millis() - pauseStartTime >= getPauseDuration()) {
       isPaused = false;
       currentConstellation = 0;
       showConnections = false;
@@ -123,8 +126,9 @@ function draw() {
   } else {
     drawDots();
     drawScale();
+    drawFastModeIndicator();
     // Check if animation is complete
-    if (currentTime >= animationDuration) {
+    if (currentTime >= getAnimationDuration()) {
       isPaused = true;
       pauseStartTime = millis();
       currentConstellation = 0;
@@ -137,10 +141,11 @@ function draw() {
 function drawDots() {
   let now = millis();
   for (let dot of dots) {
-    // Move towards target
     if (!dot.arrived && !isPaused) {
-      dot.x = lerp(dot.x, dot.targetX, 0.05);
-      dot.y = lerp(dot.y, dot.targetY, 0.05);
+      // Faster movement in fast mode
+      let moveSpeed = fastMode ? 0.15 : 0.05;
+      dot.x = lerp(dot.x, dot.targetX, moveSpeed);
+      dot.y = lerp(dot.y, dot.targetY, moveSpeed);
       if (dist(dot.x, dot.y, dot.targetX, dot.targetY) < 1) {
         dot.arrived = true;
         dot.arrivalTime = now;
@@ -148,15 +153,15 @@ function drawDots() {
     }
     
     let alpha = 255;
-    let sizeFactor = 1; // default
+    let sizeFactor = 1;
     
     if (showConnections) {
       let constellationTime = now - constellationStartTime;
-      let fadeInProgress   = constrain(constellationTime / 1000, 0, 1);
+      // Faster constellation fade in fast mode
+      let fadeInProgress = constrain(constellationTime / (fastMode ? 200 : 1000), 0, 1);
       
       if (!dot.inConstellation) {
-        // Fade out non-constellation dots
-        let fadeProgress = constellationTime / constellationFadeDuration;
+        let fadeProgress = constellationTime / (fastMode ? 500 : constellationFadeDuration);
         alpha = lerp(255, 50, constrain(fadeProgress, 0, 1));
       } else {
         // Two-phase growth: up to size 20, then shrink to size 8, then fix at 8
@@ -179,8 +184,8 @@ function drawDots() {
       
     } else if (dot.arrived) {
       let timeSinceArrival = now - dot.arrivalTime;
-      if (timeSinceArrival > fadeStartDelay) {
-        let fadeProgress = (timeSinceArrival - fadeStartDelay) / fadeDuration;
+      if (timeSinceArrival > getFadeStartDelay()) {
+        let fadeProgress = (timeSinceArrival - getFadeStartDelay()) / getFadeDuration();
         fadeProgress = constrain(fadeProgress, 0, 1);
         alpha = 255 * (1 - fadeProgress);
         sizeFactor = 1 + fadeProgress;
@@ -253,7 +258,7 @@ function drawScale() {
   textSize(14);
   text("Portfolio Average", avgPos, arrowBottom + 15);
   
-  // Risk center arrow
+  // Risk center arrow - shorter arrow and higher text
   if (showConnections && constellations.length > 0) {
     let c = constellations[0];
     if (c.color) {
@@ -267,12 +272,13 @@ function drawScale() {
       }
       stroke(255);
       strokeWeight(1.5);
-      line(colorPos, arrowBottom, colorPos, arrowTop);
+      let riskArrowBottom = scaleY + scaleHeight + 9;  // Shorter arrow
+      line(colorPos, riskArrowBottom, colorPos, arrowTop);
       line(colorPos - headSize, arrowTop + headSize, colorPos, arrowTop);
       line(colorPos + headSize, arrowTop + headSize, colorPos, arrowTop);
       noStroke();
       fill(255);
-      text("center of this risk", colorPos, arrowBottom + 7);
+      text("Center of this Risk", colorPos, riskArrowBottom + 15);  // Text closer to arrow
     }
   }
 }
@@ -391,7 +397,8 @@ function drawConstellationWidth() {
 
 function mousePressed() {
   if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
-    running = false;
+    fastMode = !fastMode;
+    resetAnimation();
   }
 }
 
@@ -496,4 +503,38 @@ function createConnections() {
   constellations.push(constellation);
   showConnections = true;
   constellationStartTime = millis();
+}
+
+function getAnimationDuration() {
+  return fastMode ? 1000 : 6000;  // 1 second vs 6 seconds
+}
+
+function getPauseDuration() {
+  return fastMode ? 500 : 8000;   // 0.5 seconds vs 8 seconds
+}
+
+function getFadeStartDelay() {
+  return fastMode ? 200 : 2000;   // 0.2 seconds vs 2 seconds
+}
+
+function getFadeDuration() {
+  return fastMode ? 3000 : 30000; // 3 seconds vs 30 seconds
+}
+
+function keyPressed() {
+  if (key === 'f' || key === 'F') {
+    fastMode = !fastMode;
+    resetAnimation();
+  }
+}
+
+// Add this function to draw the fast mode indicator
+function drawFastModeIndicator() {
+  push();
+  noStroke();
+  fill(0, 255, 0);  // Green
+  textAlign(LEFT, TOP);
+  textSize(16);
+  text(fastMode ? "FAST MODE" : "", 20, 20);
+  pop();
 }
