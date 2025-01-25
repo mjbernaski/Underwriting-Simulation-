@@ -150,12 +150,11 @@ function drawDots() {
     let sizeFactor = 1;
     
     if (showConnections) {
-      // If in a constellation, grow dots quickly, else fade them out
       let constellationTime = now - constellationStartTime;
       let fadeInProgress = constrain(constellationTime / 1000, 0, 1);
       if (!dot.inConstellation) {
         let fadeProgress = constellationTime / constellationFadeDuration;
-        alpha = lerp(255, 50, constrain(fadeProgress, 0, 1));
+        alpha = lerp(255, 180, constrain(fadeProgress, 0, 1));
       } else {
         sizeFactor = lerp(1, 20, fadeInProgress * fadeInProgress);
         alpha = lerp(255, 0, fadeInProgress);
@@ -165,7 +164,7 @@ function drawDots() {
       if (timeSinceArrival > fadeStartDelay) {
         let fadeProgress = (timeSinceArrival - fadeStartDelay) / fadeDuration;
         fadeProgress = constrain(fadeProgress, 0, 1);
-        alpha = 255 * (1 - fadeProgress);
+        alpha = lerp(255, 180, fadeProgress);
         sizeFactor = 1 + fadeProgress;
       }
     }
