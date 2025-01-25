@@ -1,58 +1,52 @@
+//
+// Refactored p5.js code with "growing lines" fix
+//
+
 let dots = [];
 let histogramBins = [];
 let binCount = 50;
-let animationDuration = 6000; // 60 seconds for each animation
-let pauseDuration = 8000;      // Changed to 8 seconds pause between runs
+let animationDuration = 6000;  // 6 seconds for each animation
+let pauseDuration = 8000;      // 8 seconds pause between runs
 let startTime;
 let numDots = 25000;
-let dotSize = 2;             // Added dot size variable
+let dotSize = 2;
 let iterationCount = 0;
 let maxIterations = 5;
 let isPaused = false;
 let pauseStartTime;
 let maxDotSize = 4;
-let fadeStartDelay = 2000;  // Start fading 2 seconds after arrival
-let fadeDuration = 30000;   // Take 30 seconds to fade out completely
+let fadeStartDelay = 2000;     // Start fading 2 seconds after arrival
+let fadeDuration = 30000;      // Take 30 seconds to fade out completely
 let showConnections = false;
-let connectedDots = [];
 let numConnections = 40;
-let connectionAlpha = 60;  // Reduced from 120 to make lines fainter
-let constellationFadeDuration = 3000; // Time to fade out unconnected dots
+let connectionAlpha = 60;
+let constellationFadeDuration = 3000;
 let constellationStartTime = 0;
 let running = true;
-let constellationColor;
+let constellationStyle = "both";
 let constellationsPerHistogram = 1;
 let currentConstellation = 0;
-let usedDots = new Set();  // Track dots used across all constellations
-let numConstellations = 3;  // Parameter for number of constellations
-let constellations = [];    // Array to hold all constellation data
-let portfolioAverageX = 0;  // Store the average x position
-let graphics;  // Remove this
-let blobVertices = [];  // Remove this
-let noiseOffset = 0;  // Remove this
-let constellationWidths = [];  // Array to store all constellation widths
-let constellationStyle = "both";  // can be "line", "shape", or "both"
-let growthDuration = 1000;  // 1 second for dots to grow
-let constellationDelay = 1200;  // Show constellation after dots finish growing
+let usedDots = new Set();
+let numConstellations = 3;
+let constellations = [];
+let portfolioAverageX = 0;
+let constellationWidths = [];
 
-// Add this class to organize constellation data
+// Class to store constellation data
 class Constellation {
   constructor() {
     this.dots = new Set();
     this.connections = [];
     this.color = null;
+    this.totalDistance = 0; // Will store the sum of all segment distances
   }
 }
 
 function setup() {
-  createCanvas(3200, 1700);  // Remove WEBGL
-  
-  // Initialize histogram bins
+  createCanvas(3200, 1700);  
   for (let i = 0; i < binCount; i++) {
     histogramBins[i] = 0;
   }
-  
-  // Start first animation
   resetAnimation();
 }
 
@@ -65,35 +59,34 @@ function resetAnimation() {
   currentConstellation = 0;
   usedDots.clear();
   
-  // Add some random variation to the normal distribution
-  let skew = random(-0.3, 0.3);  // Random skew factor
-  let spread = random(0.8, 1.2);  // Random spread factor
-  
-  // Generate dots with slightly varied normal distribution
+  // Random skew and spread for slight variation
+  let skew = random(-0.3, 0.3);
+  let spread = random(0.8, 1.2);
+
+  // Generate dots with varied normal distribution
   for (let i = 0; i < numDots; i++) {
     let u1 = random();
     let u2 = random();
     let z = sqrt(-2 * log(u1)) * cos(TWO_PI * u2);
+    z = z * spread + skew;
     
-    // Apply variation
-    z = z * spread + skew;  // Modify the z-score
-    
-    let x = map(z, -3, 3, 100, width-100);
-    let binIndex = floor(map(x, 0, width, 0, binCount));
+    let xMapped = map(z, -3, 3, 100, width - 100);
+    let binIndex = floor(map(xMapped, 0, width, 0, binCount));
     binIndex = constrain(binIndex, 0, binCount - 1);
     histogramBins[binIndex]++;
     
     dots.push({
       x: random(width),
       y: random(height),
-      targetX: x,
+      targetX: xMapped,
       targetY: height - 100 - (histogramBins[binIndex] * 1),
       arrived: false,
-      arrivalTime: 0
+      arrivalTime: 0,
+      inConstellation: false
     });
   }
   
-  // Calculate portfolio average after generating all dots
+  // Calculate portfolio average
   let totalX = 0;
   for (let dot of dots) {
     totalX += dot.targetX;
@@ -101,7 +94,7 @@ function resetAnimation() {
   portfolioAverageX = totalX / dots.length;
   
   if (!running) {
-    constellationWidths = [];  // Clear widths when animation stops
+    constellationWidths = [];
   }
 }
 
@@ -117,7 +110,6 @@ function draw() {
       drawConnections();
       drawConstellationWidth();
     }
-    
     // Check if pause is over
     if (millis() - pauseStartTime >= pauseDuration) {
       isPaused = false;
@@ -131,7 +123,6 @@ function draw() {
   } else {
     drawDots();
     drawScale();
-    
     // Check if animation is complete
     if (currentTime >= animationDuration) {
       isPaused = true;
@@ -144,18 +135,14 @@ function draw() {
 }
 
 function drawDots() {
-  let currentTime = millis();
-  
-  // Update and draw dots
+  let now = millis();
   for (let dot of dots) {
     if (!dot.arrived && !isPaused) {
-      // Move dots towards target
       dot.x = lerp(dot.x, dot.targetX, 0.05);
       dot.y = lerp(dot.y, dot.targetY, 0.05);
-      
       if (dist(dot.x, dot.y, dot.targetX, dot.targetY) < 1) {
         dot.arrived = true;
-        dot.arrivalTime = currentTime;
+        dot.arrivalTime = now;
       }
     }
     
@@ -163,20 +150,18 @@ function drawDots() {
     let sizeFactor = 1;
     
     if (showConnections) {
-      let constellationTime = currentTime - constellationStartTime;
-      let growthProgress = constrain(constellationTime / growthDuration, 0, 1);
-      
+      // If in a constellation, grow dots quickly, else fade them out
+      let constellationTime = now - constellationStartTime;
+      let fadeInProgress = constrain(constellationTime / 1000, 0, 1);
       if (!dot.inConstellation) {
-        // Fade non-constellation dots to faint
         let fadeProgress = constellationTime / constellationFadeDuration;
         alpha = lerp(255, 50, constrain(fadeProgress, 0, 1));
       } else {
-        // Grow constellation dots first, then fade them out
-        sizeFactor = lerp(1, 8, growthProgress);
-        alpha = lerp(255, 0, growthProgress);
+        sizeFactor = lerp(1, 20, fadeInProgress * fadeInProgress);
+        alpha = lerp(255, 0, fadeInProgress);
       }
     } else if (dot.arrived) {
-      let timeSinceArrival = currentTime - dot.arrivalTime;
+      let timeSinceArrival = now - dot.arrivalTime;
       if (timeSinceArrival > fadeStartDelay) {
         let fadeProgress = (timeSinceArrival - fadeStartDelay) / fadeDuration;
         fadeProgress = constrain(fadeProgress, 0, 1);
@@ -186,10 +171,12 @@ function drawDots() {
     }
     
     let dotColor;
-    if (dot.targetX < width/2) {
-      dotColor = lerpColor(color(255, 0, 0), color(255, 255, 0), map(dot.targetX, 100, width/2, 0, 1));
+    if (dot.targetX < width / 2) {
+      dotColor = lerpColor(color(255, 0, 0), color(255, 255, 0), 
+                           map(dot.targetX, 100, width / 2, 0, 1));
     } else {
-      dotColor = lerpColor(color(255, 255, 0), color(0, 255, 0), map(dot.targetX, width/2, width-100, 0, 1));
+      dotColor = lerpColor(color(255, 255, 0), color(0, 255, 0), 
+                           map(dot.targetX, width / 2, width - 100, 0, 1));
     }
     
     fill(red(dotColor), green(dotColor), blue(dotColor), alpha);
@@ -207,10 +194,12 @@ function drawScale() {
   noStroke();
   for (let x = scaleStart; x < scaleEnd; x++) {
     let scaleColor;
-    if (x < width/2) {
-      scaleColor = lerpColor(color(255, 0, 0), color(255, 255, 0), map(x, scaleStart, width/2, 0, 1));
+    if (x < width / 2) {
+      scaleColor = lerpColor(color(255, 0, 0), color(255, 255, 0), 
+                             map(x, scaleStart, width / 2, 0, 1));
     } else {
-      scaleColor = lerpColor(color(255, 255, 0), color(0, 255, 0), map(x, width/2, scaleEnd, 0, 1));
+      scaleColor = lerpColor(color(255, 255, 0), color(0, 255, 0), 
+                             map(x, width / 2, scaleEnd, 0, 1));
     }
     fill(scaleColor);
     rect(x, scaleY, 1, scaleHeight);
@@ -224,83 +213,96 @@ function drawScale() {
   
   let sigmaPoints = [-3, -2, -1, 0, 1, 2, 3];
   for (let sigma of sigmaPoints) {
-    let x = map(sigma, -3, 3, scaleStart, scaleEnd);
-    line(x, scaleY, x, scaleY + scaleHeight);
-    text(sigma, x, scaleY + scaleHeight + 15);
+    let xVal = map(sigma, -3, 3, scaleStart, scaleEnd);
+    line(xVal, scaleY, xVal, scaleY + scaleHeight);
+    text(sigma, xVal, scaleY + scaleHeight + 15);
   }
   
-  // Draw Portfolio Average
-  let avgPos = map(portfolioAverageX, 100, width-100, scaleStart, scaleEnd);
-  
+  // Portfolio average arrow
+  let avgPos = map(portfolioAverageX, 100, width - 100, scaleStart, scaleEnd);
   stroke(255);
   strokeWeight(1.5);
   let arrowBottom = scaleY + scaleHeight + 25;
   let arrowTop = scaleY + scaleHeight;
-  
   line(avgPos, arrowBottom, avgPos, arrowTop);
-  
   let headSize = 6;
   line(avgPos - headSize, arrowTop + headSize, avgPos, arrowTop);
   line(avgPos + headSize, arrowTop + headSize, avgPos, arrowTop);
-  
   noStroke();
   fill(255);
   textAlign(CENTER);
   textSize(14);
   text("Portfolio Average", avgPos, arrowBottom + 15);
   
+  // Risk center arrow
   if (showConnections && constellations.length > 0) {
-    let constellation = constellations[0];
-    let colorPos;
-    let r = red(constellation.color);
-    let g = green(constellation.color);
-    
-    if (r === 255) {
-      colorPos = map(g, 0, 255, scaleStart, width/2);
-    } else {
-      colorPos = map(r, 255, 0, width/2, scaleEnd);
+    let c = constellations[0];
+    if (c.color) {
+      let colorPos;
+      let r = red(c.color);
+      let g = green(c.color);
+      if (r === 255) {
+        colorPos = map(g, 0, 255, scaleStart, width / 2);
+      } else {
+        colorPos = map(r, 255, 0, width / 2, scaleEnd);
+      }
+      stroke(255);
+      strokeWeight(1.5);
+      line(colorPos, arrowBottom, colorPos, arrowTop);
+      line(colorPos - headSize, arrowTop + headSize, colorPos, arrowTop);
+      line(colorPos + headSize, arrowTop + headSize, colorPos, arrowTop);
+      noStroke();
+      fill(255);
+      text("center of this risk", colorPos, arrowBottom + 7);
     }
-    
-    stroke(255);
-    strokeWeight(1.5);
-    line(colorPos, arrowBottom, colorPos, arrowTop);
-    line(colorPos - headSize, arrowTop + headSize, colorPos, arrowTop);
-    line(colorPos + headSize, arrowTop + headSize, colorPos, arrowTop);
-    
-    noStroke();
-    fill(255);
-    text("center of this risk", colorPos, arrowBottom + 7);
   }
 }
 
 function drawConnections() {
+  // How far along in the "grow" animation?
   let constellationTime = millis() - constellationStartTime;
-  
-  // Only start drawing constellation after dots have grown
-  if (constellationTime < constellationDelay) return;
-  
-  let fadeInProgress = constrain((constellationTime - constellationDelay) / 1000, 0, 1);
-  let glowIntensity = constrain(constellationTime / constellationFadeDuration, 0, 1);
-  
-  for (let constellation of constellations) {
+  let growProgress = constrain(constellationTime / 1000, 0, 1);  // 1 second to reach full length
+
+  for (let c of constellations) {
+    // We'll figure out how much of the total path to draw (in pixels).
+    let pathDistanceToShow = c.totalDistance * growProgress;
+
+    // For the shape style, we collect the partial vertices.
     if (constellationStyle === "shape" || constellationStyle === "both") {
-      // Draw constellation as shape with rounded edges
       noStroke();
-      // Fade in the shape opacity
-      let shapeAlpha = 30 * fadeInProgress;
-      fill(red(constellation.color), green(constellation.color), 0, shapeAlpha);
-      
+      let shapeAlpha = 30 * growProgress;
+      fill(red(c.color), green(c.color), 0, shapeAlpha);
+
       beginShape();
-      if (constellation.connections.length > 0) {
-        let firstDot = constellation.connections[0].start;
+      // We'll walk the connections and add vertices up to the partial distance
+      let distSoFar = 0;
+      if (c.connections.length > 0) {
+        // Add initial two curveVertices
+        let firstDot = c.connections[0].start;
         curveVertex(firstDot.x, firstDot.y);
         curveVertex(firstDot.x, firstDot.y);
         
-        for (let connection of constellation.connections) {
-          curveVertex(connection.end.x, connection.end.y);
+        for (let i = 0; i < c.connections.length; i++) {
+          let seg = c.connections[i];
+          let dSeg = dist(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+          if (distSoFar + dSeg <= pathDistanceToShow) {
+            // Entire segment is within the "grow" distance
+            curveVertex(seg.end.x, seg.end.y);
+            distSoFar += dSeg;
+          } else {
+            // Partial segment
+            let leftover = pathDistanceToShow - distSoFar;
+            if (leftover > 0) {
+              let pct = leftover / dSeg;
+              let xPart = lerp(seg.start.x, seg.end.x, pct);
+              let yPart = lerp(seg.start.y, seg.end.y, pct);
+              curveVertex(xPart, yPart);
+            }
+            break;
+          }
         }
-        
-        let lastDot = constellation.connections[constellation.connections.length - 1].end;
+
+        let lastDot = c.connections[c.connections.length - 1].end;
         curveVertex(lastDot.x, lastDot.y);
         curveVertex(firstDot.x, firstDot.y);
         curveVertex(firstDot.x, firstDot.y);
@@ -308,28 +310,41 @@ function drawConnections() {
       endShape(CLOSE);
     }
     
+    // For line style, do a similar partial approach
     if (constellationStyle === "line" || constellationStyle === "both") {
-      // Draw constellation as line with fade in
-      let lineAlpha = connectionAlpha * fadeInProgress;
-      stroke(red(constellation.color), green(constellation.color), 0, lineAlpha);
-      strokeWeight(2);
-      
+      let lineAlpha = connectionAlpha * growProgress;
+      stroke(red(c.color), green(c.color), 0, lineAlpha);
+      let sw = lerp(1, 3, growProgress);
+      strokeWeight(sw);
+
       beginShape();
       noFill();
-      
-      if (constellation.connections.length > 0) {
-        let firstDot = constellation.connections[0].start;
+
+      let distSoFar = 0;
+      if (c.connections.length > 0) {
+        let firstDot = c.connections[0].start;
         curveVertex(firstDot.x, firstDot.y);
         curveVertex(firstDot.x, firstDot.y);
         
-        for (let connection of constellation.connections) {
-          curveVertex(connection.end.x, connection.end.y);
+        for (let i = 0; i < c.connections.length; i++) {
+          let seg = c.connections[i];
+          let dSeg = dist(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+          if (distSoFar + dSeg <= pathDistanceToShow) {
+            curveVertex(seg.end.x, seg.end.y);
+            distSoFar += dSeg;
+          } else {
+            let leftover = pathDistanceToShow - distSoFar;
+            if (leftover > 0) {
+              let pct = leftover / dSeg;
+              let xPart = lerp(seg.start.x, seg.end.x, pct);
+              let yPart = lerp(seg.start.y, seg.end.y, pct);
+              curveVertex(xPart, yPart);
+            }
+            break;
+          }
         }
-        
-        let lastDot = constellation.connections[constellation.connections.length - 1].end;
-        curveVertex(lastDot.x, lastDot.y);
       }
-      
+
       endShape();
     }
   }
@@ -337,27 +352,24 @@ function drawConnections() {
 
 function drawConstellationWidth() {
   if (!showConnections || constellations.length === 0) return;
+  let c = constellations[0];
+  if (c.connections.length === 0) return;
   
-  let constellation = constellations[0];
-  if (constellation.connections.length === 0) return;
-  
-  // Find leftmost and rightmost x coordinates
   let leftmost = width;
   let rightmost = 0;
-  
-  constellation.dots.forEach(dot => {
+  c.dots.forEach(dot => {
     leftmost = min(leftmost, dot.x);
     rightmost = max(rightmost, dot.x);
   });
   
-  // Calculate width as percentage of total width
   let constellationWidth = rightmost - leftmost;
   let widthPercentage = (constellationWidth / (width - 200)) * 100;
   
-  // Calculate average of all widths
-  let averageWidth = constellationWidths.reduce((a, b) => a + b, 0) / constellationWidths.length;
-  
-  // Display in upper right corner with larger font
+  let averageWidth = 0;
+  if (constellationWidths.length > 0) {
+    averageWidth = constellationWidths.reduce((a, b) => a + b, 0) / constellationWidths.length;
+  }
+
   noStroke();
   fill(255);
   textAlign(RIGHT);
@@ -374,133 +386,106 @@ function mousePressed() {
 }
 
 function createConnections() {
-  console.log("Starting createConnections");
   let constellation = new Constellation();
   
-  // Filter for dots that have arrived at their targets and haven't been used
-  let availableDots = dots.filter(dot => 
-    dot.arrived && !usedDots.has(dot)
-  );
-  
-  // Generate random width using normal distribution
-  // Using Box-Muller transform for normal distribution
+  // Filter arrived, unused dots
+  let availableDots = dots.filter(dot => dot.arrived && !usedDots.has(dot));
+
+  // Random normal for width
   let u1 = random();
   let u2 = random();
   let z = sqrt(-2 * log(u1)) * cos(TWO_PI * u2);
+  let meanWidth = width * 0.33;  
+  let sdWidth = width * 0.67;    
+  let sectionWidth = constrain(meanWidth + (z * sdWidth), width * 0.2, width * 0.9);
   
-  // Convert z-score to width with mean=1/3 and sd=2/3
-  let meanWidth = width * 0.33;  // 1/3 of width
-  let sdWidth = width * 0.67;    // 2/3 of width
-  let sectionWidth = constrain(meanWidth + (z * sdWidth), width * 0.2, width * 0.9);  // Minimum 20% of width
-  
-  // Ensure section stays within bounds
   let maxStart = width - 100 - sectionWidth;
   let sectionStart = constrain(random(100, maxStart), 100, maxStart);
-  
-  // Add bias correction to encourage more central/right sections
-  if (random() < 0.5) {  // 50% chance to shift right
-    sectionStart = constrain(random(width/2 - sectionWidth/2, maxStart), 100, maxStart);
+  if (random() < 0.5) {
+    sectionStart = constrain(random(width / 2 - sectionWidth / 2, maxStart), 100, maxStart);
   }
-  
   let sectionEnd = sectionStart + sectionWidth;
   
-  // Filter dots within our chosen section
-  let sectionDots = availableDots.filter(dot => 
-    dot.x >= sectionStart && dot.x <= sectionEnd
-  );
+  let sectionDots = availableDots.filter(dot => dot.x >= sectionStart && dot.x <= sectionEnd);
   
-  // Only proceed if we have enough dots
   if (sectionDots.length >= 30) {
-    console.log("Found enough dots:", sectionDots.length);
-    
-    // Select first dot randomly from section
     let currentDot = random(sectionDots);
     let numDotsToConnect = 30;
-    let minDistance = width / 15;  // Keep same minimum distance for wide spread
-    
-    // Create path through dots
+    let minDistance = width / 15;  
     for (let i = 0; i < numDotsToConnect; i++) {
       constellation.dots.add(currentDot);
       usedDots.add(currentDot);
-      
       if (i < numDotsToConnect - 1) {
         let nextDot = null;
         let candidateDots = [];
-        
-        // Find dots that are far enough away but still in our section
         for (let dot of sectionDots) {
           if (!constellation.dots.has(dot) && !usedDots.has(dot)) {
             let d = dist(currentDot.x, currentDot.y, dot.x, dot.y);
             if (d > minDistance) {
-              candidateDots.push({dot: dot, distance: d});
+              candidateDots.push({ dot: dot, distance: d });
             }
           }
         }
-        
-        // Sort by distance and pick randomly from eligible dots
         if (candidateDots.length > 0) {
-          // Don't sort by distance - pick completely randomly to encourage wider spread
           nextDot = random(candidateDots).dot;
-          
-          // Store connections in constellation object
           constellation.connections.push({
             start: currentDot,
             end: nextDot
           });
-          
           currentDot = nextDot;
         } else {
-          // If no suitable dots found, end constellation early
           break;
         }
       }
     }
     
-    // Calculate average color for this constellation
+    // Average color for constellation
     let totalRed = 0;
     let totalGreen = 0;
     constellation.dots.forEach(dot => {
       let dotColor;
-      if (dot.targetX < width/2) {
-        dotColor = lerpColor(color(255, 0, 0), color(255, 255, 0), map(dot.targetX, 100, width/2, 0, 1));
+      if (dot.targetX < width / 2) {
+        dotColor = lerpColor(color(255, 0, 0), color(255, 255, 0), 
+                             map(dot.targetX, 100, width / 2, 0, 1));
       } else {
-        dotColor = lerpColor(color(255, 255, 0), color(0, 255, 0), map(dot.targetX, width/2, width-100, 0, 1));
+        dotColor = lerpColor(color(255, 255, 0), color(0, 255, 0), 
+                             map(dot.targetX, width / 2, width - 100, 0, 1));
       }
       totalRed += red(dotColor);
       totalGreen += green(dotColor);
     });
-    
     let avgRed = totalRed / constellation.dots.size;
     let avgGreen = totalGreen / constellation.dots.size;
     constellation.color = color(avgRed, avgGreen, 0);
     
-    console.log("Created constellation with connections:", constellation.connections.length);
-    
-    // Clear any previous constellation markings
-    for (let dot of dots) {
-      dot.inConstellation = false;
+    // Mark which dots are in the constellation
+    for (let d of dots) {
+      d.inConstellation = false;
     }
-
-    // Mark dots that are part of the constellation
     for (let connection of constellation.connections) {
       connection.start.inConstellation = true;
       connection.end.inConstellation = true;
     }
 
-    // Calculate and store width
+    // Calculate path distance
+    constellation.totalDistance = 0;
+    for (let i = 0; i < constellation.connections.length; i++) {
+      let seg = constellation.connections[i];
+      constellation.totalDistance += dist(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+    }
+
+    // Compute and store width
     let leftmost = width;
     let rightmost = 0;
     constellation.dots.forEach(dot => {
       leftmost = min(leftmost, dot.x);
       rightmost = max(rightmost, dot.x);
     });
-    let constellationWidth = rightmost - leftmost;
-    let widthPercentage = (constellationWidth / (width - 200)) * 100;
-    constellationWidths.push(widthPercentage);
-  } else {
-    console.log("Not enough dots found:", sectionDots.length);
+    let cWidth = rightmost - leftmost;
+    let widthPerc = (cWidth / (width - 200)) * 100;
+    constellationWidths.push(widthPerc);
   }
-  
+
   constellations.push(constellation);
   showConnections = true;
   constellationStartTime = millis();
