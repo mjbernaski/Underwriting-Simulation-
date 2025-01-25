@@ -1,0 +1,145 @@
+let cols, rows;
+let scl = 20;
+let w, h;
+let terrain = [];
+let ants = [];
+
+let antSlider;            
+let contourSpacingSlider; 
+
+// Speeds for ants (slow vs. fast)
+let slowSpeed = 0.02;
+let fastSpeed = 0.08;
+let currentSpeed = slowSpeed; // Start with slow speed
+
+function setup() {
+  createCanvas(windowWidth, windowHeight, WEBGL);
+
+  // Ant slider (300 to 1000)
+  antSlider = createSlider(300, 1000, 300);
+  antSlider.position(10, 10);
+
+  // Contour spacing slider (1 to 50)
+  contourSpacingSlider = createSlider(1, 50, 10);
+  contourSpacingSlider.position(10, 30);
+
+  // Terrain dimensions
+  w = width * 2;  
+  h = height * 2;
+  cols = floor(w / scl);
+  rows = floor(h / scl);
+
+  // Initialize terrain array
+  for (let x = 0; x < cols; x++) {
+    terrain[x] = [];
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  w = width * 2;
+  h = height * 2;
+  cols = floor(w / scl);
+  rows = floor(h / scl);
+
+  terrain = [];
+  for (let x = 0; x < cols; x++) {
+    terrain[x] = [];
+  }
+}
+
+function draw() {
+  background(220);
+  orbitControl();
+  rotateX(PI/3);
+  translate(-w/2, -h/2, -200);
+
+  // Generate terrain heights
+  let yOff = 0;
+  for (let y = 0; y < rows; y++) {
+    let xOff = 0;
+    for (let x = 0; x < cols; x++) {
+      terrain[x][y] = map(noise(xOff, yOff), 0, 1, -200, 800);
+      xOff += 0.05;
+    }
+    yOff += 0.05;
+  }
+
+  // Draw faint contour lines
+  strokeWeight(0.2);
+  stroke(128); // faint grey
+  noFill();
+  let contourStep = contourSpacingSlider.value();
+  for (let y = 0; y < rows - 1; y++) {
+    beginShape(TRIANGLE_STRIP);
+    for (let x = 0; x < cols; x++) {
+      let z1 = round(terrain[x][y] / contourStep) * contourStep;
+      let z2 = round(terrain[x][y + 1] / contourStep) * contourStep;
+      vertex(x * scl, y * scl, z1);
+      vertex(x * scl, (y + 1) * scl, z2);
+    }
+    endShape();
+  }
+
+  // Match ants to slider value, move, and draw
+  updateAnts(antSlider.value());
+  moveAnts();
+  drawAnts();
+}
+
+// Keep ant array size consistent with slider
+function updateAnts(numAnts) {
+  while (ants.length < numAnts) {
+    ants.push({
+      x: random(cols),
+      y: random(rows),
+      tx: random(cols),
+      ty: random(rows),
+      c: color(random(255), random(255), random(255))
+    });
+  }
+  while (ants.length > numAnts) {
+    ants.pop();
+  }
+}
+
+// Move ants toward their targets, using currentSpeed
+function moveAnts() {
+  for (let ant of ants) {
+    let dx = ant.tx - ant.x;
+    let dy = ant.ty - ant.y;
+    ant.x += dx * currentSpeed;
+    ant.y += dy * currentSpeed;
+
+    if (dist(ant.x, ant.y, ant.tx, ant.ty) < 1) {
+      ant.tx = random(cols);
+      ant.ty = random(rows);
+    }
+
+    ant.x = constrain(ant.x, 0, cols - 1);
+    ant.y = constrain(ant.y, 0, rows - 1);
+  }
+}
+
+// Draw ants as small colored spheres
+function drawAnts() {
+  noStroke();
+  for (let ant of ants) {
+    fill(ant.c);
+    let az = terrain[floor(ant.x)][floor(ant.y)];
+    push();
+    translate(ant.x * scl, ant.y * scl, az);
+    sphere(4);
+    pop();
+  }
+}
+
+// Toggle ant speed on mouse click
+function mouseClicked() {
+  // Increase speed if currently slow, otherwise go back to slow
+  if (currentSpeed === slowSpeed) {
+    currentSpeed = fastSpeed;
+  } else {
+    currentSpeed = slowSpeed;
+  }
+}
