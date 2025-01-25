@@ -32,7 +32,9 @@ let numConstellations = 3;
 let constellations = [];
 let portfolioAverageX = 0;
 let constellationWidths = [];
-let fastMode = true;  // Toggle for fast animation mode
+let fastMode = false;  // Toggle for fast animation mode
+let centerDotSize = 50;  // Size of the center dot
+let blinkRate = 500;    // Blink every 500ms
 
 class Constellation {
   constructor() {
@@ -272,7 +274,7 @@ function drawScale() {
       }
       stroke(255);
       strokeWeight(1.5);
-      let riskArrowBottom = scaleY + scaleHeight + 9;  // Shorter arrow
+      let riskArrowBottom = scaleY + scaleHeight + 15;  // Shorter arrow
       line(colorPos, riskArrowBottom, colorPos, arrowTop);
       line(colorPos - headSize, arrowTop + headSize, colorPos, arrowTop);
       line(colorPos + headSize, arrowTop + headSize, colorPos, arrowTop);
