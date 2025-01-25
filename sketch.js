@@ -31,6 +31,7 @@ let graphics;  // Remove this
 let blobVertices = [];  // Remove this
 let noiseOffset = 0;  // Remove this
 let constellationWidths = [];  // Array to store all constellation widths
+let constellationStyle = "both";  // can be "line", "shape", or "both"
 
 // Add this class to organize constellation data
 class Constellation {
@@ -270,26 +271,46 @@ function drawConnections() {
   let glowIntensity = constrain(constellationTime / constellationFadeDuration, 0, 1);
   
   for (let constellation of constellations) {
-    stroke(red(constellation.color), green(constellation.color), 0, connectionAlpha);
-    strokeWeight(2);
-    
-    beginShape();
-    noFill();
-    
-    if (constellation.connections.length > 0) {
-      let firstDot = constellation.connections[0].start;
-      curveVertex(firstDot.x, firstDot.y);
-      curveVertex(firstDot.x, firstDot.y);
+    if (constellationStyle === "shape" || constellationStyle === "both") {
+      // Draw constellation as shape
+      noStroke();
+      fill(red(constellation.color), green(constellation.color), 0, 30);
       
-      for (let connection of constellation.connections) {
-        curveVertex(connection.end.x, connection.end.y);
+      beginShape();
+      if (constellation.connections.length > 0) {
+        let firstDot = constellation.connections[0].start;
+        vertex(firstDot.x, firstDot.y);
+        
+        for (let connection of constellation.connections) {
+          vertex(connection.end.x, connection.end.y);
+        }
       }
-      
-      let lastDot = constellation.connections[constellation.connections.length - 1].end;
-      curveVertex(lastDot.x, lastDot.y);
+      endShape(CLOSE);
     }
     
-    endShape();
+    if (constellationStyle === "line" || constellationStyle === "both") {
+      // Draw constellation as line
+      stroke(red(constellation.color), green(constellation.color), 0, connectionAlpha);
+      strokeWeight(2);
+      
+      beginShape();
+      noFill();
+      
+      if (constellation.connections.length > 0) {
+        let firstDot = constellation.connections[0].start;
+        curveVertex(firstDot.x, firstDot.y);
+        curveVertex(firstDot.x, firstDot.y);
+        
+        for (let connection of constellation.connections) {
+          curveVertex(connection.end.x, connection.end.y);
+        }
+        
+        let lastDot = constellation.connections[constellation.connections.length - 1].end;
+        curveVertex(lastDot.x, lastDot.y);
+      }
+      
+      endShape();
+    }
   }
 }
 
